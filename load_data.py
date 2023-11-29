@@ -8,6 +8,7 @@ from pyspark.sql.functions import (
     dayofmonth,
     dayofweek,
     hour,
+    months_between,
 )
 from pyspark.sql import SparkSession, functions, types
 import re
@@ -17,22 +18,22 @@ election_schema = types.StructType(
         types.StructField("created_at", types.StringType()),
         types.StructField("tweet_id", types.StringType()),
         types.StructField("tweet", types.StringType()),
-        types.StructField("likes", types.IntegerType()),
-        types.StructField("retweet_count", types.IntegerType()),
+        types.StructField("likes", types.StringType()),
+        types.StructField("retweet_count", types.StringType()),
         types.StructField("source", types.StringType()),
         types.StructField("user_id", types.StringType()),
         types.StructField("user_name", types.StringType()),
         types.StructField("user_screen_name", types.StringType()),
         types.StructField("user_description", types.StringType()),
         types.StructField("user_join_date", types.StringType()),
-        types.StructField("user_followers_count", types.IntegerType()),
-        types.StructField("user_location", types.IntegerType()),
+        types.StructField("user_followers_count", types.StringType()),
+        types.StructField("user_location", types.StringType()),
         types.StructField("lat", types.FloatType()),
         types.StructField("long", types.FloatType()),
         types.StructField("city", types.StringType()),
         types.StructField("country", types.StringType()),
-        types.StructField("continent", types.IntegerType()),
-        types.StructField("state", types.IntegerType()),
+        types.StructField("continent", types.StringType()),
+        types.StructField("state", types.StringType()),
         types.StructField("state_code", types.StringType()),
         types.StructField("collected_at", types.StringType()),
     ]
@@ -147,26 +148,29 @@ def main(inputs, output):
         .withColumn("candidate", candidates(data["filename"]))
         .withColumn("state", get_state(data["lat"], data["long"]))
         .withColumn("date", phrase_date(data["created_at"]))
+        .withColumn("join_date", phrase_date(data["user_join_date"]))
     )
-    data = data.withColumn("timestamp", to_timestamp(data["date"]))
+    data = (
+        data.filter(
+            (data["date"] != "Wrong File") & (data["join_date"] != "Wrong File")
+        )
+        .withColumn("timestamp", to_timestamp(data["date"]))
+        .withColumn("join_timestamp", to_timestamp(data["join_date"]))
+    )
 
     data = (
-        data.withColumn("year", year(data["timestamp"]))
-        .withColumn("month", month(data["timestamp"]))
-        .withColumn("day", dayofmonth(data["timestamp"]))
-        .withColumn("dayofweek", dayofweek(data["timestamp"]))
+        data.withColumn("dayofweek", dayofweek(data["timestamp"]))
         .withColumn("hour", hour(data["timestamp"]))
+        .withColumn("online_age", months_between("timestamp", "join_timestamp"))
         .select(
-            "year",
-            "month",
-            "day",
+            "timestamp",
             "dayofweek",
             "hour",
             "state",
             "candidate",
             "likes",
             "retweet_count",
-            "user_join_date",
+            "online_age",
             "user_followers_count",
             "lat",
             "long",
@@ -174,7 +178,8 @@ def main(inputs, output):
         )
     )
     data = data.filter((data["state"] != "Unknown"))
-    data.coalesce(1).write.csv(output, mode="overwrite", header=True)
+    # data.show()
+    data.coalesce(1).write.csv(output, mode="overwrite", header=False)
 
 
 if __name__ == "__main__":

@@ -3,12 +3,10 @@ import sys
 assert sys.version_info >= (3, 5)  # make sure we have Python 3.5+
 from pyspark.sql.functions import (
     to_timestamp,
-    year,
-    month,
-    dayofmonth,
     dayofweek,
     hour,
     months_between,
+    date_format,
 )
 from pyspark.sql import SparkSession, functions, types
 import re
@@ -95,12 +93,12 @@ state_boundaries = {
 
 @functions.udf(returnType=types.StringType())
 def phrase_date(line):
-    match = re.search(r"(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})", line)
+    match = re.search(r"(\d{4}-\d{2}-\d{2} \d{2})", line)
     if match:
         time_part = match.group(1)
-        return time_part  # Outputs: 20160201-02
+        return time_part
     else:
-        return "Wrong File"
+        return "Wrong Format"
 
 
 @functions.udf(returnType=types.StringType())
@@ -108,7 +106,7 @@ def get_state(lat, lon):
     for state, (min_lat, max_lat, min_lon, max_lon) in state_boundaries.items():
         if min_lat <= lat <= max_lat and min_lon <= lon <= max_lon:
             return state
-    return "Unknown"
+    return "Unknown Region"
 
 
 # add more functions as necessary
@@ -119,20 +117,17 @@ def candidates(filename):
     elif "joebiden" in filename:
         return "Biden"
     else:
-        return "Unknown"
+        return "Wrong File"
 
 
-def main(inputs, output):
+def main():
     # main logic starts here
     data = (
-        spark.read.csv(inputs, schema=election_schema)
+        spark.read.csv("archive", schema=election_schema)
         .withColumn("filename", functions.input_file_name())
         .select(
             "created_at",
-            "likes",
-            "retweet_count",
             "user_join_date",
-            "user_followers_count",
             "lat",
             "long",
             "filename",
@@ -147,46 +142,41 @@ def main(inputs, output):
         )
         .withColumn("candidate", candidates(data["filename"]))
         .withColumn("state", get_state(data["lat"], data["long"]))
-        .withColumn("date", phrase_date(data["created_at"]))
-        .withColumn("join_date", phrase_date(data["user_join_date"]))
+        .withColumn("time", phrase_date(data["created_at"]))
+        .withColumn("join_time", phrase_date(data["user_join_date"]))
     )
     data = (
         data.filter(
-            (data["date"] != "Wrong File") & (data["join_date"] != "Wrong File")
+            (data["time"] != "Wrong Format")
+            & (data["join_time"] != "Wrong Format")
+            & (data["state"] != "Unknown Region")
+            & (data["candidate"] != "Wrong File")
         )
-        .withColumn("timestamp", to_timestamp(data["date"]))
-        .withColumn("join_timestamp", to_timestamp(data["join_date"]))
+        .withColumn("timestamp", to_timestamp(data["time"]))
+        .withColumn("join_timestamp", to_timestamp(data["join_time"]))
     )
 
     data = (
-        data.withColumn("dayofweek", dayofweek(data["timestamp"]))
+        data.withColumn("date", date_format("timestamp", "yyyy-MM-dd"))
+        .withColumn("dayofweek", dayofweek(data["timestamp"]))
         .withColumn("hour", hour(data["timestamp"]))
         .withColumn("online_age", months_between("timestamp", "join_timestamp"))
         .select(
-            "timestamp",
+            "date",
             "dayofweek",
             "hour",
-            "state",
             "candidate",
-            "likes",
-            "retweet_count",
             "online_age",
-            "user_followers_count",
-            "lat",
-            "long",
+            "state",
             "tweet",
         )
     )
-    data = data.filter((data["state"] != "Unknown"))
-    # data.show()
-    data.coalesce(1).write.csv(output, mode="overwrite", header=False)
+    data.repartition("state").write.csv("cleaned", mode="overwrite", header=False)
 
 
 if __name__ == "__main__":
-    inputs = sys.argv[1]
-    output = sys.argv[2]
     spark = SparkSession.builder.appName("read election data").getOrCreate()
     assert spark.version >= "3.0"  # make sure we have Spark 3.0+
     spark.sparkContext.setLogLevel("WARN")
     sc = spark.sparkContext
-    main(inputs, output)
+    main()

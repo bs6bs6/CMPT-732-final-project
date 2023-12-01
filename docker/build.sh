@@ -1,0 +1,1 @@
+docker build -f ./Dockerfile -t bs6/732-project-image .

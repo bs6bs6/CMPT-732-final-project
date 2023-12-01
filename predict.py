@@ -36,7 +36,8 @@ def main(model):
         "predictedLabel"
     ]
 
-    print("Predicted tmax tomorrow:", prediction)
+    print("Predicted sentiment:", prediction)
+    
 
 
 if __name__ == "__main__":

@@ -45,33 +45,40 @@ def main(model):
         message_json = json.loads(message_str)
         print(message_json)
          # main logic starts here
-        model = PipelineModel.load(model)
-        features = spark.createDataFrame(
-            [
-                (message_json["hour"], message_json["dayofweek"], message_json["online_age"], message_json["candidate"], message_json["language"], ""),
-            ],
-            ["hour", "dayofweek", "online_age", "candidate", "language", "sentiment"],
-        )
-        stringIndexerModel = model.stages[-6]
+        try:
+            features = spark.createDataFrame(
+                [
+                    (message_json["hour"], message_json["dayofweek"], message_json["online_age"], message_json["candidate"], message_json["language"], ""),
+                ],
+                ["hour", "dayofweek", "online_age", "candidate", "language", "sentiment"],
+            )
+            stringIndexerModel = model.stages[-6]
 
-        predicted = model.transform(features)
-        # Create an IndexToString transformer
-        labelConverter = IndexToString(
-            inputCol="prediction",
-            outputCol="predictedLabel",
-            labels=stringIndexerModel.labels,
-        )
+            predicted = model.transform(features)
+            # Create an IndexToString transformer
+            labelConverter = IndexToString(
+                inputCol="prediction",
+                outputCol="predictedLabel",
+                labels=stringIndexerModel.labels,
+            )
 
-        # Convert numeric predictions back to original sentiment labels
-        converted_predictions = labelConverter.transform(predicted)
-        prediction = converted_predictions.select("predictedLabel").collect()[0][
-            "predictedLabel"
-        ]
-        # 提取uuid并创建预测结果
-        response = {"uuid": message_json["uuid"], "prediction": prediction}
-        print(prediction)
+            # Convert numeric predictions back to original sentiment labels
+            converted_predictions = labelConverter.transform(predicted)
+            prediction = converted_predictions.select("predictedLabel").collect()[0][
+                "predictedLabel"
+            ]
+            # 提取uuid并创建预测结果
+            response = {"uuid": message_json["uuid"], "prediction": prediction}
+            print(prediction)
 
-        produce_message('election_predict_response', response)
+            produce_message('election_predict_response', response)
+        except KeyError as e:
+                print(f"Data format error: Missing key {e}. Message skipped.")
+                continue  # 跳过当前消息，继续下一条消息
+
+        except Exception as e:
+                print(f"An error occurred: {e}. Message skipped.")
+                continue  # 跳过当前消息，继续下一条消息
 
     # 关闭消费者连接
     consumer.close()
@@ -81,5 +88,6 @@ if __name__ == "__main__":
     assert spark.version >= "3.0"  # make sure we have Spark 3.0+
     spark.sparkContext.setLogLevel("WARN")
     sc = spark.sparkContext
+    model = PipelineModel.load(model)
     main(model)
 

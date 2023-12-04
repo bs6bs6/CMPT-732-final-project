@@ -1,3 +1,6 @@
+### Project website: http://54.213.254.255/
+
+
 ### Before running the python files, you have to download our source data from https://www.kaggle.com/datasets/manchunhui/us-election-2020-tweets, name the file "archive" and put it under the db_connect folder.
 
 ## Part 1: data analyse
@@ -110,7 +113,6 @@ npm install
 ```
 npm start
 ```
-Then you can visit http://localhost:3000 to visit our demo.
-
+Then you can visit http://localhost:3000 to check our demo.
 
 

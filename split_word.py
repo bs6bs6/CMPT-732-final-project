@@ -245,8 +245,8 @@ def main(inputs):
     )
     data = data.filter((data["state"] != "Unknown")).cache()
 
-    trump_words = data.filter(data["candidate"]=='Trump').select(explode(filter_stop_words(clean_tweet(data["tweet"]))).alias("word"),data["state"])
-    biden_words = data.filter(data["candidate"]=='Biden').select(explode(filter_stop_words(clean_tweet(data["tweet"]))).alias("word"),data["state"])
+    trump_words = data.filter(data["candidate"]=='Trump').repartition("tweet").select(explode(filter_stop_words(clean_tweet(data["tweet"]))).alias("word"),data["state"])
+    biden_words = data.filter(data["candidate"]=='Biden').repartition("tweet").select(explode(filter_stop_words(clean_tweet(data["tweet"]))).alias("word"),data["state"])
 
 
     trump_word_count = trump_words.groupBy("state","word").count()

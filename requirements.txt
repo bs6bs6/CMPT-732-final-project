@@ -2,3 +2,5 @@ confluent-kafka==2.3.0
 numpy
 pyspark
 textblob
+langdetect==1.0.9
+cassandra-driver
